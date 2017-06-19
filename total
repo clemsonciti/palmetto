@@ -1,0 +1,35 @@
+#!/bin/bash
+
+# Thanks: https://unix.stackexchange.com/a/183187
+
+echo "Job Count: $#"
+
+queued=0
+running=0
+finished=0
+
+for job in "$@"; do
+	stat="$(qstat -x $job | tail -n+3 | awk '{ print $5 }')"
+
+	if [ "$stat" == "F" ]; then
+		finished=$(expr $finished + 1)
+	elif [ "$stat" == "R" ]; then
+		running=$(expr $running + 1)
+	else
+		queued=$(expr $queued + 1)
+	fi
+done
+
+echo "Queued: $queued"
+echo "Running: $running"
+echo "Finished: $finished"
+
+echo -n "CPU Time: "
+for job in "$@"; do
+	qstat -x $job | tail -n+3 | awk '{ print $4 }'
+done | awk '{ split($1, tm, ":"); secs += tm[3]; mins += tm[2] + int(secs / 60); hrs += tm[1] + int(mins / 60); secs %= 60; mins %= 60; } END { printf "%02d:%02d:%02d\n", hrs, mins, secs; }'
+
+echo -n "Wall Time: "
+for job in "$@"; do
+	qstat -ax $job | tail -n+6 | awk '{ print $11 ":00" }'
+done | awk '{ split($1, tm, ":"); secs += tm[3]; mins += tm[2] + int(secs / 60); hrs += tm[1] + int(mins / 60); secs %= 60; mins %= 60; } END { printf "%02d:%02d:%02d\n", hrs, mins, secs; }'

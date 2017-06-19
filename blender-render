@@ -1,0 +1,74 @@
+#!/bin/bash
+bfile="$1"
+njobs="$2"
+if [ -z "$bfile" ] || [ -z "$njobs" ]; then
+	echo "Usage: $0 <file.blend> <number of jobs>"
+	exit 1
+fi
+
+# get full blender path
+bfile="$(readlink -f "$bfile")"
+blender="$(which blender)"
+bash="$(which bash)"
+ffmpeg="$(which ffmpeg)"
+
+# make directories
+scratch="/scratch3/$USER"
+outdir="$scratch/$(basename ${bfile/.blend/})"
+vfile="$scratch/$(basename ${bfile/.blend/.mp4})"
+mkdir -p "$outdir"
+
+# declare simplified qsubs
+queue="qsub -j oe -o $outdir/"
+rargs="-l select=${njobs}:ncpus=16:ngpus=2:mem=32gb,walltime=48:00:00"
+bargs="--enable-autoexec --background -t 16"
+
+run() {
+	$queue <<EOF
+#PBS -N blender-render
+#PBS $rargs
+
+module add gnu-parallel
+
+frames="\$('$blender' $bargs '$bfile' --python-expr 'import bpy; print(bpy.context.scene.frame_end)' 2>/dev/null | grep '^[[:digit:]]' | head -n1)"
+iter=1
+skip=\$(expr \$frames / $njobs)
+extra=\$(expr \$frames % $njobs)
+
+while [ \$iter -le \$frames ]; do
+	next=\$(expr \$iter + \$skip)
+
+	if [ \$extra -gt 0 ]; then
+		next=\$(expr \$next + 1)
+		extra=\$(expr \$extra - 1)
+	fi
+
+	if [ \$next -gt \$frames ]; then
+		next=\$(expr \$frames + 1)
+	fi
+
+	echo '"$blender" $bargs "$bfile" --render-output "$outdir/"' --render-frame \$iter..\$(expr \$next - 1)
+
+	iter=\$next
+done | parallel --sshloginfile "\$PBS_NODEFILE"
+
+"$ffmpeg" -i "$outdir/%04d.png" -framerate 30 -pix_fmt yuv420p -vcodec libx264 "$vfile"
+EOF
+}
+
+jobid="$(run)"
+
+echo "Job ID: $jobid"
+
+# tell user
+echo "Rendering '$vfile' (ctrl+c to retrieve video file later)..."
+
+trap "echo && echo \"Video file will be at '$vfile' after job '$jobid' finishes.\" && exit" SIGINT SIGTERM
+
+# wait on ffmpeg
+while qstat $jobid &>/dev/null; do
+	sleep 1
+done
+
+# tell user
+echo "Video available at '$vfile'."
