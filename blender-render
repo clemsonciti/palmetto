@@ -19,7 +19,7 @@ vfile="$scratch/$(basename ${bfile/.blend/.mp4})"
 mkdir -p "$outdir"
 
 # declare simplified qsubs
-queue="qsub -j oe -o $outdir/"
+queue="qsub -j oe -o $outdir/log"
 rargs="-l select=${njobs}:ncpus=16:ngpus=2:mem=32gb,walltime=48:00:00"
 bargs="--enable-autoexec --background -t 16"
 
@@ -47,10 +47,10 @@ while [ \$iter -le \$frames ]; do
 		next=\$(expr \$frames + 1)
 	fi
 
-	echo '"$blender" $bargs "$bfile" --render-output "$outdir/"' --render-frame \$iter..\$(expr \$next - 1)
+	echo '"$blender" $bargs "$bfile" --render-output "$outdir/"' --render-format PNG --render-frame \$iter..\$(expr \$next - 1)
 
 	iter=\$next
-done | parallel --sshloginfile "\$PBS_NODEFILE"
+done | parallel --sshloginfile "\$PBS_NODEFILE" -P 1
 
 "$ffmpeg" -i "$outdir/%04d.png" -framerate 30 -pix_fmt yuv420p -vcodec libx264 "$vfile"
 EOF
