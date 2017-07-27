@@ -24,34 +24,54 @@ rargs="-l select=${njobs}:ncpus=16:ngpus=2:mem=32gb,walltime=48:00:00"
 bargs="--enable-autoexec --background -t 16"
 
 run() {
+	# queue up a generated PBS file
 	$queue <<EOF
 #PBS -N blender-render
 #PBS $rargs
 
 module add gnu-parallel
 
-frames="\$('$blender' $bargs '$bfile' --python-expr 'import bpy; print(bpy.context.scene.frame_end)' 2>/dev/null | grep '^[[:digit:]]' | head -n1)"
-iter=1
-skip=\$(expr \$frames / $njobs)
-extra=\$(expr \$frames % $njobs)
+# get all frames from Blender API
+total="\$('$blender' $bargs '$bfile' --python-expr 'import bpy; print(bpy.context.scene.frame_end)' 2>/dev/null | grep '^[[:digit:]]' | head -n1)"
 
-while [ \$iter -le \$frames ]; do
-	next=\$(expr \$iter + \$skip)
+# truncate frames to render file
+echo -n >"$outdir/frames"
 
-	if [ \$extra -gt 0 ]; then
-		next=\$(expr \$next + 1)
-		extra=\$(expr \$extra - 1)
-	fi
+# add all frames that have not been rendered
+for frame in \$(seq \$total); do
+	# check if the specified output file has been rendered and add it if not
+	[ -f "\$(printf "$outdir/%04d.png" \$frame)" ] || echo "\$frame" >>"$outdir/frames"
+done
 
-	if [ \$next -gt \$frames ]; then
-		next=\$(expr \$frames + 1)
-	fi
+# get a total number of frames to render
+frames=\$(wc -w <"$outdir/frames")
 
-	echo '"$blender" $bargs "$bfile" --render-output "$outdir/"' --render-format PNG --render-frame \$iter..\$(expr \$next - 1)
+# bail if there are no frames to render
+[ \$frames -gt 0 ] || exit
 
-	iter=\$next
-done | parallel --sshloginfile "\$PBS_NODEFILE" -P 1
+# split frames to render into $njobs parts of roughly equal size with Python and send that with a blender command to parallel
+python <<IEOF | xargs -I'{}' echo '"$blender"' $bargs '"$bfile"' --render-output '"$outdir/"' --render-format PNG --render-frame '{}' | parallel --sshloginfile "\$PBS_NODEFILE" -j 1
+from __future__ import division, print_function
 
+# read all of the lines in the frames file
+with open('$outdir/frames', 'r') as framefile:
+	frames = framefile.read().splitlines()
+
+# calculate avg number of frames per job
+avg = len(frames)/$njobs
+last = 0.0
+
+# keep going until we are out of frames
+while last < len(frames):
+	# if this chunk has frames in it
+	if int(last) != int(last + avg):
+		# comma separate a list of frames roughly the size of avg
+		print(','.join(frames[int(last):int(last + avg)]))
+	# remember added frames
+	last += avg
+IEOF
+
+# stich together frames into a video file
 "$ffmpeg" -i "$outdir/%04d.png" -framerate 30 -pix_fmt yuv420p -vcodec libx264 "$vfile"
 EOF
 }
