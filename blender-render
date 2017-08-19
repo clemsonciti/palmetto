@@ -26,7 +26,7 @@ bargs="--enable-autoexec --background -t 16"
 run() {
 	# queue up a generated PBS file
 	$queue <<EOF
-#PBS -N blender-render
+#PBS -N blender_$(basename ${bfile/.blend/})
 #PBS $rargs
 
 module add gnu-parallel
@@ -50,7 +50,7 @@ frames=\$(wc -w <"$outdir/frames")
 [ \$frames -gt 0 ] || exit
 
 # split frames to render into $njobs parts of roughly equal size with Python and send that with a blender command to parallel
-python <<IEOF | xargs -I'{}' echo '"$blender"' $bargs '"$bfile"' --render-output '"$outdir/"' --render-format PNG --render-frame '{}' | parallel --sshloginfile "\$PBS_NODEFILE" -j 1
+python <<IEOF | xargs -I'{}' echo '"$blender"' $bargs '"$bfile"' --python-expr '"import bpy; bpy.context.user_preferences.addons[\\"cycles\\"].preferences.compute_device_type = \\"CUDA\\"; bpy.context.scene.cycles.device = \\"GPU\\""' --render-output '"$outdir/"' --render-format PNG --render-frame '{}' | parallel --sshloginfile "\$PBS_NODEFILE" -j 1
 from __future__ import division, print_function
 
 # read all of the lines in the frames file
