@@ -12,7 +12,8 @@ PYTHON_VERSION="3.4"
 echo "Downloading Blender ${BLENDER_VERSION}..."
 mkdir -p "$HOME/lib"
 curl "$BLENDER_MIRROR" | tar -C "$HOME/lib" -xj
-ln -sf "$BLENDER_BUILD" "$HOME/lib/blender"
+rm -f "$HOME/lib/blender"
+ln -s "$BLENDER_BUILD" "$HOME/lib/blender"
 
 echo "Writing 'blender' bin file..."
 mkdir -p "$HOME/bin"
