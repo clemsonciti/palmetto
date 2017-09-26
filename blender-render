@@ -1,8 +1,9 @@
 #!/bin/bash
 bfile="$1"
 njobs="$2"
+cuda="$3"
 if [ -z "$bfile" ] || [ -z "$njobs" ]; then
-	echo "Usage: $0 <file.blend> <number of jobs>"
+	echo "Usage: $0 <file.blend> <number of jobs> [force cuda:Y/n]"
 	exit 1
 fi
 
@@ -22,6 +23,12 @@ mkdir -p "$outdir"
 queue="qsub -j oe -o $outdir/log"
 rargs="-l select=${njobs}:ncpus=16:ngpus=2:mem=32gb,walltime=48:00:00"
 bargs="--enable-autoexec --background -t 16"
+
+if [ -z "$cuda" ] || [ "$cuda" = "Y" ] || [ "$cuda" = "y" ]; then
+	cargs="--python-expr '\"import bpy; bpy.context.user_preferences.addons[\\\"cycles\\\"].preferences.compute_device_type = \\\"CUDA\\\"; bpy.context.scene.cycles.device = \\\"GPU\\\"\"'"
+else
+	cargs=""
+fi
 
 run() {
 	# queue up a generated PBS file
@@ -50,7 +57,7 @@ frames=\$(wc -w <"$outdir/frames")
 [ \$frames -gt 0 ] || exit
 
 # split frames to render into $njobs parts of roughly equal size with Python and send that with a blender command to parallel
-python <<IEOF | xargs -I'{}' echo '"$blender"' $bargs '"$bfile"' --python-expr '"import bpy; bpy.context.user_preferences.addons[\\"cycles\\"].preferences.compute_device_type = \\"CUDA\\"; bpy.context.scene.cycles.device = \\"GPU\\""' --render-output '"$outdir/"' --render-format PNG --render-frame '{}' | parallel --sshloginfile "\$PBS_NODEFILE" -j 1
+python <<IEOF | xargs -I'{}' echo '"$blender"' $bargs '"$bfile"' $cargs --render-output '"$outdir/"' --render-format PNG --render-frame '{}' | parallel --sshloginfile "\$PBS_NODEFILE" -j 1
 from __future__ import division, print_function
 
 # read all of the lines in the frames file
@@ -86,7 +93,7 @@ echo "Rendering '$vfile' (ctrl+c to retrieve video file later)..."
 trap "echo && echo \"Video file will be at '$vfile' after job '$jobid' finishes.\" && exit" SIGINT SIGTERM
 
 # wait on ffmpeg
-while qstat $jobid &>/dev/null; do
+while qstat $jobid >/dev/null; do
 	sleep 1
 done
 
