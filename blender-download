@@ -22,6 +22,6 @@ source /etc/profile.d/modules.sh
 
 module load gcc/$GCC_VERSION cuda-toolkit/$CUDA_VERSION python/$PYTHON_VERSION
 
-cd "$HOME/lib/blender/"
+cd "\$HOME/lib/blender/"
 exec ./blender "\$@"
 EOF
