@@ -1,0 +1,26 @@
+#!/bin/bash
+GLIBC_VERSION="219"
+BLENDER_VERSION="2.79"
+
+BLENDER_BUILD="blender-${BLENDER_VERSION}-linux-glibc${GLIBC_VERSION}-x86_64"
+BLENDER_MIRROR="https://mirror.clarkson.edu/blender/release/Blender${BLENDER_VERSION}/${BLENDER_BUILD}.tar.bz2"
+
+GCC_VERSION="6.3.0"
+CUDA_VERSION="8.0.44"
+PYTHON_VERSION="3.4"
+
+echo "Downloading Blender ${BLENDER_VERSION}..."
+mkdir -p "$HOME/lib"
+curl "$BLENDER_MIRROR" | tar -C "$HOME/lib" -xj
+
+echo "Writing 'blender' bin file..."
+mkdir -p "$HOME/bin"
+cat >"$HOME/bin/blender" <<EOF
+#!/bin/bash
+source /etc/profile.d/modules.sh
+
+module load gcc/$GCC_VERSION cuda-toolkit/$CUDA_VERSION python/$PYTHON_VERSION
+
+cd "$HOME/lib/$BLENDER_BUILD/"
+exec ./blender "\$@"
+EOF
