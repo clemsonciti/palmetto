@@ -2,8 +2,13 @@
 GLIBC_VERSION="219"
 BLENDER_VERSION="2.79"
 
+FFMPEG_VERSION="3.3.4"
+
 BLENDER_BUILD="blender-${BLENDER_VERSION}-linux-glibc${GLIBC_VERSION}-x86_64"
 BLENDER_MIRROR="https://mirror.clarkson.edu/blender/release/Blender${BLENDER_VERSION}/${BLENDER_BUILD}.tar.bz2"
+
+FFMPEG_BUILD="ffmpeg-${FFMPEG_VERSION}-64bit-static"
+FFMPEG_MIRROR="https://johnvansickle.com/ffmpeg/releases/${FFMPEG_BUILD}.tar.xz"
 
 GCC_VERSION="6.3.0"
 CUDA_VERSION="8.0.44"
@@ -25,4 +30,18 @@ module load gcc/$GCC_VERSION cuda-toolkit/$CUDA_VERSION python/$PYTHON_VERSION
 
 cd "\$HOME/lib/blender/"
 exec ./blender "\$@"
+EOF
+
+echo "Downloading FFmpeg ${FFMPEG_VERSION}..."
+mkdir -p "$HOME/lib"
+curl "$FFMPEG_MIRROR" | tar -C "$HOME/lib" -xJ
+rm -f "$HOME/lib/ffmpeg"
+ln -s "$FFMPEG_BUILD" "$HOME/lib/ffmpeg"
+
+echo "Writing 'ffmpeg' bin file..."
+mkdir -p "$HOME/bin"
+cat >"$HOME/bin/ffmpeg" <<EOF
+#!/bin/bash
+cd "\$HOME/lib/ffmpeg/"
+exec ./ffmpeg "\$@"
 EOF
